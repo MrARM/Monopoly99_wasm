@@ -1,0 +1,897 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="mobile-web-app-capable" content="yes">
+  <title>Monopoly WebAssembly</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: Arial, Verdana, sans-serif;
+      background: #0a0a0a;
+      color: #ece9e8;
+      --drawer-width: 320px;
+      --drawer-tab-width: 34px;
+      --drawer-lip-width: 8px;
+    }
+    body {
+      margin: 0;
+      height: 100vh;
+      overflow: hidden;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      background: #0a0a0a;
+    }
+    main {
+      display: grid;
+      place-items: center;
+      padding: 18px;
+      min-width: 0;
+      min-height: 0;
+    }
+    .viewport {
+      position: relative;
+      width: min(100%, calc(100vh * 4 / 3 - 36px));
+      max-width: 960px;
+      aspect-ratio: 4 / 3;
+      background: #0a0a0a;
+      border: 1px solid #2b2b2b;
+    }
+    .viewport canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      border: 0;
+      image-rendering: auto;
+    }
+    #canvas {
+      z-index: 1;
+    }
+    #presentCanvas {
+      z-index: 2;
+      pointer-events: none;
+    }
+    aside {
+      position: fixed;
+      right: 0;
+      top: 0;
+      bottom: 0;
+      width: var(--drawer-width);
+      z-index: 20;
+      border-left: 1px solid #262626;
+      background: #141414;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      min-width: 0;
+      min-height: 0;
+      max-height: 100vh;
+      overflow: visible;
+      transform: translateX(0);
+      transition: transform 420ms cubic-bezier(0.23, 1, 0.32, 1);
+      box-shadow: -10px 0 24px rgba(0, 0, 0, 0.55);
+    }
+    body.drawer-collapsed aside {
+      transform: translateX(calc(var(--drawer-width) + var(--drawer-tab-width) - var(--drawer-lip-width)));
+      box-shadow: none;
+    }
+    aside::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 14px;
+      pointer-events: none;
+      background: linear-gradient(to right, rgba(0, 0, 0, 0.38), rgba(0, 0, 0, 0));
+    }
+    .drawer-tab {
+      position: absolute;
+      left: calc(-1 * var(--drawer-tab-width));
+      top: 50%;
+      transform: translateY(-50%);
+      width: var(--drawer-tab-width);
+      height: 122px;
+      border: 1px solid #8f4f4f;
+      border-right: 0;
+      border-radius: 10px 0 0 10px;
+      background: #6f3b3b;
+      color: #f7f3f2;
+      display: grid;
+      place-items: center;
+      writing-mode: vertical-rl;
+      text-orientation: mixed;
+      letter-spacing: 0.12em;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+      user-select: none;
+      padding: 0;
+      transition: background-color 160ms ease, border-color 160ms ease;
+    }
+    .drawer-tab:hover {
+      background: #7e4545;
+      border-color: #a45f5f;
+    }
+    h1 {
+      font-size: 18px;
+      margin: 0 0 2px;
+      font-weight: 700;
+    }
+    p {
+      margin: 0;
+      color: #b4b0af;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    .build {
+      color: #9c9492;
+      font-size: 11px;
+      line-height: 1.2;
+    }
+    .row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    button, label.file {
+      border: 1px solid #8f4f4f;
+      background: #6f3b3b;
+      color: #f7f3f2;
+      font: inherit;
+      font-size: 13px;
+      padding: 8px 10px;
+      cursor: pointer;
+    }
+    button:disabled {
+      opacity: .45;
+      cursor: default;
+    }
+    input[type=file] {
+      display: none;
+    }
+    .status {
+      padding: 10px;
+      border: 1px solid #2d2d2d;
+      background: #171717;
+      min-height: 40px;
+      font-size: 13px;
+      line-height: 1.35;
+      color: #ddd8d7;
+      white-space: pre-wrap;
+    }
+    .log {
+      flex: 1;
+      min-height: 0;
+      overflow: auto;
+      border: 1px solid #292929;
+      background: #111111;
+      padding: 8px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px;
+      line-height: 1.35;
+      color: #d8d2d1;
+    }
+    @media (max-width: 860px) {
+      :root {
+        --drawer-width: min(86vw, 320px);
+      }
+      body {
+        grid-template-columns: 1fr;
+        height: auto;
+        min-height: 100vh;
+        overflow: auto;
+      }
+      aside {
+        border-left: 1px solid #262626;
+        max-height: none;
+      }
+      main {
+        padding: 10px;
+      }
+      .viewport {
+        width: 100%;
+      }
+      .log {
+        min-height: 180px;
+        max-height: 45vh;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <div id="viewport" class="viewport">
+      <canvas id="canvas" width="800" height="600" tabindex="0"></canvas>
+      <canvas id="presentCanvas" width="800" height="600" aria-hidden="true"></canvas>
+    </div>
+  </main>
+  <aside id="sidePanel">
+    <button id="drawerToggle" class="drawer-tab" type="button" aria-expanded="true" aria-label="Hide menu">HIDE</button>
+    <div>
+      <h1>Monopoly(1999) in WebAssembly</h1>
+      <p>Upload a legally obtained CD ISO. Assets are unpacked locally in your browser.</p>
+    </div>
+    <div class="row">
+      <label class="file">Upload ISO<input id="isoInput" type="file" accept=".iso,application/octet-stream"></label>
+      <button id="startBtn" disabled>Start</button>
+      <button id="fullBtn">Fullscreen</button>
+      <button id="clearBtn">Reset Game File Cache</button>
+    </div>
+    <div id="status" class="status">Loading WebAssembly runtime...</div>
+    <div id="log" class="log" aria-live="polite"></div>
+  </aside>
+  <script>
+    const DAT_PACK_FILES = [
+      'DAT_MON/DAT_MAIN.DAT',
+      'DAT_MON/DAT_PAT.DAT',
+      'DAT_MON/DAT_BORD.DAT',
+      'DAT_MON/DAT_BRD2.DAT',
+      'DAT_MON/DAT_3D.DAT',
+      'DAT_MON/DAT_LN01.DAT',
+      'DAT_MON/DAT_LM01.DAT',
+      'DAT_MON/DAT_LK01.DAT'
+    ];
+
+    const AI_STRATEGY_FILES = [
+      { isoName: 'BARROW.AI', sourceName: 'Barrow.AI' },
+      { isoName: 'BOOT.AI', sourceName: 'Boot.ai' },
+      { isoName: 'CANNON.AI', sourceName: 'Cannon.ai' },
+      { isoName: 'DOG.AI', sourceName: 'Dog.ai' },
+      { isoName: 'HORSE.AI', sourceName: 'Horse.ai' },
+      { isoName: 'IRON.AI', sourceName: 'Iron.ai' },
+      { isoName: 'MONEYBAG.AI', sourceName: 'Moneybag.ai' },
+      { isoName: 'RACECAR.AI', sourceName: 'RaceCar.ai' },
+      { isoName: 'SHIP.AI', sourceName: 'Ship.ai' },
+      { isoName: 'THIMBLE.AI', sourceName: 'Thimble.ai' },
+      { isoName: 'TOPHAT.AI', sourceName: 'TopHat.ai' }
+    ];
+
+    const CLASSIC_TREE_MARKERS = [
+      'MONOPOLY/BRD_USA.VQ',
+      'MONOPOLY/DEEDS.TRE',
+      'MONOPOLY/FUNFACTS.TRE',
+      'MONOPOLY/DATA/A00L.FSD'
+    ];
+
+    const ASSET_LAYOUTS = [
+      {
+        name: 'ArtLib DAT-pack CD',
+        runtimeSupported: true,
+        requiredFiles: DAT_PACK_FILES
+      },
+      {
+        name: 'classic MONOPOLY/ retail CD tree',
+        runtimeSupported: false,
+        requiredFiles: CLASSIC_TREE_MARKERS
+      }
+    ];
+
+    const statusEl = document.getElementById('status');
+    const logEl = document.getElementById('log');
+    const startBtn = document.getElementById('startBtn');
+    const isoInput = document.getElementById('isoInput');
+    const clearBtn = document.getElementById('clearBtn');
+    const fullBtn = document.getElementById('fullBtn');
+    const drawerToggle = document.getElementById('drawerToggle');
+    const sidePanel = document.getElementById('sidePanel');
+    const viewport = document.getElementById('viewport');
+    const canvas = document.getElementById('canvas');
+    const presentCanvas = document.getElementById('presentCanvas');
+    const presentContext = presentCanvas.getContext('2d');
+    const WEB_BUILD_ID = 'wasm-2026.23.1'; // Year.WeekNo.BuildNo.
+    const urlParams = new URLSearchParams(window.location.search);
+    const WEB_VISUAL_PROBE = urlParams.has('probe');
+    const WEB_LOG_SINK = urlParams.get('logSink');
+
+    let runtimeReady = false;
+    let assetsReady = false;
+
+    function setDrawerCollapsed(collapsed) {
+      document.body.classList.toggle('drawer-collapsed', collapsed);
+      drawerToggle.textContent = collapsed ? 'MENU' : 'HIDE';
+      drawerToggle.setAttribute('aria-expanded', String(!collapsed));
+      drawerToggle.setAttribute('aria-label', collapsed ? 'Show menu' : 'Hide menu');
+    }
+
+    drawerToggle.addEventListener('click', () => {
+      const collapsed = document.body.classList.contains('drawer-collapsed');
+      setDrawerCollapsed(!collapsed);
+    });
+
+    function setStatus(text) {
+      statusEl.textContent = text;
+    }
+
+    let logCount = 0;
+    const logBuffer = [];
+    const MAX_LOG_LINES = 800;
+    try {
+      localStorage.setItem('monopolyLogBuffer', '[]');
+    } catch (_err) {
+    }
+
+    window.monopolyLog = function(text) {
+      if (WEB_LOG_SINK) {
+        const body = `${performance.now().toFixed(1)} ${String(text)}\n`;
+        try {
+          if (!navigator.sendBeacon || !navigator.sendBeacon(WEB_LOG_SINK, new Blob([body], { type: 'text/plain' }))) {
+            fetch(WEB_LOG_SINK, { method: 'POST', mode: 'no-cors', body });
+          }
+        } catch (_err) {
+        }
+      }
+
+      logBuffer.push(String(text));
+      if (logBuffer.length > 300) {
+        logBuffer.shift();
+      }
+      try {
+        localStorage.setItem('monopolyLogBuffer', JSON.stringify(logBuffer));
+      } catch (_err) {
+      }
+
+      if (logCount < MAX_LOG_LINES) {
+        console.log(text);
+        const line = document.createElement('div');
+        line.textContent = text;
+        logEl.appendChild(line);
+        logEl.scrollTop = logEl.scrollHeight;
+      } else if (logCount === MAX_LOG_LINES) {
+        console.log('Log output truncated.');
+        const line = document.createElement('div');
+        line.textContent = 'Log output truncated.';
+        logEl.appendChild(line);
+        logEl.scrollTop = logEl.scrollHeight;
+      }
+      logCount++;
+    };
+
+    window.monopolyLog(`Launcher ${WEB_BUILD_ID} loaded.`);
+    setTimeout(() => {
+      if (!runtimeReady) {
+        window.monopolyLog(`WASM runtime has not initialized after 5000ms (${WEB_BUILD_ID}).`);
+      }
+    }, 5000);
+
+    let rgb565Presenter = null;
+    let presenterLoggedNonzero = false;
+    let presenterProbeArmed = false;
+    let presenterProbeLogged = false;
+    let presenter2DLogged = false;
+    let presentImageData = null;
+
+    function compilePresenterShader(gl, type, source) {
+      const shader = gl.createShader(type);
+      gl.shaderSource(shader, source);
+      gl.compileShader(shader);
+      if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+        throw new Error(gl.getShaderInfoLog(shader) || 'shader compile failed');
+      }
+      return shader;
+    }
+
+    function getRGB565Presenter(width, height) {
+      if (rgb565Presenter && rgb565Presenter.width === width && rgb565Presenter.height === height) {
+        return rgb565Presenter;
+      }
+
+      const gl = canvas.getContext('webgl2');
+      if (!gl) return null;
+
+      const vertexShader = compilePresenterShader(gl, gl.VERTEX_SHADER, `#version 300 es
+        in vec2 a_position;
+        in vec2 a_texCoord;
+        out vec2 v_texCoord;
+        void main() {
+          v_texCoord = a_texCoord;
+          gl_Position = vec4(a_position, 0.0, 1.0);
+        }`);
+      const fragmentShader = compilePresenterShader(gl, gl.FRAGMENT_SHADER, `#version 300 es
+        precision mediump float;
+        uniform sampler2D u_texture;
+        in vec2 v_texCoord;
+        out vec4 outColor;
+        void main() {
+          outColor = texture(u_texture, v_texCoord);
+        }`);
+      const program = gl.createProgram();
+      gl.attachShader(program, vertexShader);
+      gl.attachShader(program, fragmentShader);
+      gl.linkProgram(program);
+      if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+        throw new Error(gl.getProgramInfoLog(program) || 'presenter link failed');
+      }
+
+      const vao = gl.createVertexArray ? gl.createVertexArray() : null;
+      if (vao) gl.bindVertexArray(vao);
+
+      const buffer = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+        -1, -1, 0, 1,
+         1, -1, 1, 1,
+        -1,  1, 0, 0,
+         1,  1, 1, 0
+      ]), gl.STATIC_DRAW);
+
+      const texture = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, texture);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+      rgb565Presenter = {
+        gl,
+        width,
+        height,
+        program,
+        vao,
+        buffer,
+        texture,
+        rgba: new Uint8Array(width * height * 4),
+        position: gl.getAttribLocation(program, 'a_position'),
+        texCoord: gl.getAttribLocation(program, 'a_texCoord'),
+        textureUniform: gl.getUniformLocation(program, 'u_texture')
+      };
+      return rgb565Presenter;
+    }
+
+    window.monopolyPresentRGBAArray = function(rgba, width, height) {
+      if (!rgba || width <= 0 || height <= 0) return;
+      window.monopolyPresentCount = (window.monopolyPresentCount || 0) + 1;
+      if (window.monopolyPresentCount === 1) {
+        window.monopolyLog('JS presenter: first RGBA frame.');
+      }
+      let presentSample = 0;
+      for (let y = 0; y < height; y += 47) {
+        for (let x = 0; x < width; x += 53) {
+          const offset = (y * width + x) * 4;
+          const value = (rgba[offset] << 16) | (rgba[offset + 1] << 8) | rgba[offset + 2];
+          presentSample = ((presentSample * 33) ^ value) >>> 0;
+        }
+      }
+      if (window.monopolyPresentCount <= 8 || (presentSample !== 0 && !presenterLoggedNonzero)) {
+        window.monopolyLog(`JS presenter frame #${window.monopolyPresentCount}: sample=0x${presentSample.toString(16).padStart(8, '0')}.`);
+        if (presentSample !== 0) presenterLoggedNonzero = true;
+      }
+      if (presentSample !== 0) presenterProbeArmed = true;
+      if (presentContext) {
+        if (!presenter2DLogged) {
+          window.monopolyLog('JS presenter: 2D overlay canvas active.');
+          presenter2DLogged = true;
+        }
+        if (WEB_VISUAL_PROBE && presenterProbeArmed) {
+          if (!presenterProbeLogged) {
+            window.monopolyLog('JS presenter visual probe: forcing red 2D overlay after nonzero frame.');
+            presenterProbeLogged = true;
+          }
+          presentContext.fillStyle = '#f00';
+          presentContext.fillRect(0, 0, presentCanvas.width, presentCanvas.height);
+          return;
+        }
+        if (!presentImageData || presentImageData.width !== width || presentImageData.height !== height) {
+          presentImageData = presentContext.createImageData(width, height);
+        }
+        presentImageData.data.set(rgba);
+        presentContext.putImageData(presentImageData, 0, 0);
+        return;
+      }
+      const presenter = getRGB565Presenter(width, height);
+      if (!presenter) return;
+
+      const gl = presenter.gl;
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.viewport(0, 0, canvas.width, canvas.height);
+      if (gl.bindVertexArray) gl.bindVertexArray(presenter.vao);
+      gl.disable(gl.DEPTH_TEST);
+      gl.disable(gl.BLEND);
+      gl.disable(gl.CULL_FACE);
+      gl.disable(gl.SCISSOR_TEST);
+      gl.disable(gl.STENCIL_TEST);
+      gl.colorMask(true, true, true, true);
+      gl.depthMask(false);
+      if (WEB_VISUAL_PROBE && presenterProbeArmed) {
+        if (!presenterProbeLogged) {
+          window.monopolyLog('JS presenter visual probe: forcing red default framebuffer after nonzero frame.');
+          presenterProbeLogged = true;
+        }
+        gl.clearColor(1, 0, 0, 1);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+        gl.finish();
+        return;
+      }
+      gl.useProgram(presenter.program);
+      if (presenter.textureUniform) gl.uniform1i(presenter.textureUniform, 0);
+      gl.bindBuffer(gl.ARRAY_BUFFER, presenter.buffer);
+      gl.enableVertexAttribArray(presenter.position);
+      gl.vertexAttribPointer(presenter.position, 2, gl.FLOAT, false, 16, 0);
+      gl.enableVertexAttribArray(presenter.texCoord);
+      gl.vertexAttribPointer(presenter.texCoord, 2, gl.FLOAT, false, 16, 8);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, presenter.texture);
+      gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, rgba);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+      const presentError = gl.getError();
+      if (presentError) {
+        window.monopolyLog(`JS presenter WebGL error: 0x${presentError.toString(16)}.`);
+      }
+    };
+
+    function normalizeIsoPath(path) {
+      return path.replace(/\\/g, '/').replace(/;[0-9]+$/g, '').toUpperCase();
+    }
+
+    function readAscii(bytes, offset, length) {
+      let out = '';
+      for (let i = 0; i < length; i++) {
+        const c = bytes[offset + i];
+        if (c === 0) break;
+        out += String.fromCharCode(c);
+      }
+      return out;
+    }
+
+    function readUint32LE(bytes, offset) {
+      return (bytes[offset] | (bytes[offset + 1] << 8) | (bytes[offset + 2] << 16) | (bytes[offset + 3] << 24)) >>> 0;
+    }
+
+    function parseDirectory(bytes, extent, size, prefix, out, visited) {
+      const visitKey = `${extent}:${size}`;
+      if (visited.has(visitKey)) return;
+      visited.add(visitKey);
+
+      const start = extent * 2048;
+      const end = Math.min(start + size, bytes.length);
+      let pos = start;
+      while (pos < end) {
+        const len = bytes[pos];
+        if (len === 0) {
+          pos = ((Math.floor(pos / 2048) + 1) * 2048);
+          continue;
+        }
+        const record = pos;
+        const fileExtent = readUint32LE(bytes, record + 2);
+        const fileSize = readUint32LE(bytes, record + 10);
+        const flags = bytes[record + 25];
+        const nameLen = bytes[record + 32];
+        const rawName = bytes[record + 33];
+        let name = readAscii(bytes, record + 33, nameLen);
+        pos += len;
+        if ((nameLen === 1 && (rawName === 0 || rawName === 1)) || name === '' || name === '.' || name === '..') continue;
+        name = normalizeIsoPath(name);
+        const fullPath = prefix ? `${prefix}/${name}` : name;
+        if (flags & 0x02) {
+          parseDirectory(bytes, fileExtent, fileSize, fullPath, out, visited);
+        } else {
+          out.set(fullPath, { extent: fileExtent, size: fileSize });
+        }
+      }
+    }
+
+    function parseIso(bytes) {
+      const pvd = 16 * 2048;
+      if (readAscii(bytes, pvd + 1, 5) !== 'CD001') {
+        throw new Error('This file is not an ISO9660 CD image.');
+      }
+      const root = pvd + 156;
+      const rootExtent = readUint32LE(bytes, root + 2);
+      const rootSize = readUint32LE(bytes, root + 10);
+      const files = new Map();
+      parseDirectory(bytes, rootExtent, rootSize, '', files, new Set());
+      return files;
+    }
+
+    function detectAssetLayout(isoFiles) {
+      for (const layout of ASSET_LAYOUTS) {
+        const missing = layout.requiredFiles.filter(name => !isoFiles.has(name));
+        if (missing.length === 0) {
+          return layout;
+        }
+      }
+      return null;
+    }
+
+    function unsupportedLayoutMessage(isoFiles) {
+      const classicMissing = CLASSIC_TREE_MARKERS.filter(name => !isoFiles.has(name));
+      const datMissing = DAT_PACK_FILES.filter(name => !isoFiles.has(name));
+      const lines = [
+        `Unsupported Monopoly CD layout. Scanned ${isoFiles.size} files.`,
+        '',
+        'This WebAssembly source build currently needs the ArtLib DAT-pack layout:',
+        ...datMissing.map(name => `  missing ${name}`),
+        ''
+      ];
+      if (classicMissing.length === 0) {
+        lines.push('This ISO looks like the older MONOPOLY/ retail file tree, not the DAT-pack build this source expects.');
+      } else {
+        lines.push('It also did not match the known older MONOPOLY/ retail tree markers:');
+        lines.push(...classicMissing.map(name => `  missing ${name}`));
+      }
+      return lines.join('\n');
+    }
+
+    function ensureDir(path) {
+      const parts = path.split('/').filter(Boolean);
+      let current = '';
+      for (const part of parts) {
+        current += '/' + part;
+        try { Module.FS.mkdir(current); } catch (e) {}
+      }
+    }
+
+    function writeFileFromIso(bytes, isoFiles, isoPath, outputPath) {
+      const entry = isoFiles.get(isoPath);
+      if (!entry) throw new Error(`Missing required CD file: ${isoPath}`);
+      const offset = entry.extent * 2048;
+      const data = bytes.subarray(offset, offset + entry.size);
+      const outPath = outputPath || `/cdrom/${isoPath.toLowerCase()}`;
+      ensureDir(outPath.split('/').slice(0, -1).join('/'));
+      Module.FS.writeFile(outPath, data);
+      return outPath;
+    }
+
+    async function cacheAssets() {
+      await new Promise((resolve, reject) => {
+        Module.FS.syncfs(false, err => err ? reject(err) : resolve());
+      });
+    }
+
+    function cachedDatPackAvailable() {
+      return DAT_PACK_FILES.every(name => {
+        try {
+          Module.FS.stat(`/cdrom/${name.toLowerCase()}`);
+          return true;
+        } catch (e) {
+          return false;
+        }
+      });
+    }
+
+    function cachedAiStrategiesAvailable() {
+      return AI_STRATEGY_FILES.every(file => {
+        try {
+          Module.FS.stat(`/cdrom/${file.isoName.toLowerCase()}`);
+          return true;
+        } catch (e) {
+          return false;
+        }
+      });
+    }
+
+    function cachedRuntimeAssetsAvailable() {
+      return cachedDatPackAvailable() && cachedAiStrategiesAvailable();
+    }
+
+    function findIsoAiStrategy(isoFiles, file) {
+      const candidates = [
+        file.isoName,
+        `DAT_MON/${file.isoName}`,
+        `MONOPOLY/${file.isoName}`,
+        `MONOPOLY/AI/${file.isoName}`,
+        `DATA/${file.isoName}`
+      ];
+      return candidates.find(name => isoFiles.has(name)) || null;
+    }
+
+    function extractAiStrategiesFromIso(bytes, isoFiles) {
+      let extracted = 0;
+      for (const file of AI_STRATEGY_FILES) {
+        const isoPath = findIsoAiStrategy(isoFiles, file);
+        if (!isoPath) continue;
+        const outPath = writeFileFromIso(bytes, isoFiles, isoPath, `/cdrom/${file.isoName.toLowerCase()}`);
+        window.monopolyLog(`Mounted ${outPath}`);
+        extracted++;
+      }
+      return extracted;
+    }
+
+    async function seedSourceAiStrategies() {
+      let seeded = 0;
+      for (const file of AI_STRATEGY_FILES) {
+        const outPath = `/cdrom/${file.isoName.toLowerCase()}`;
+        try {
+          Module.FS.stat(outPath);
+          continue;
+        } catch (e) {}
+
+        const response = await fetch(`ai/${file.sourceName}?${WEB_BUILD_ID}`);
+        if (!response.ok) {
+          window.monopolyLog(`Missing AI strategy ${file.sourceName}; ${response.status}.`);
+          continue;
+        }
+        Module.FS.writeFile(outPath, new Uint8Array(await response.arrayBuffer()));
+        window.monopolyLog(`Mounted source AI strategy ${outPath}`);
+        seeded++;
+      }
+      return seeded;
+    }
+
+    async function seedBundledResources() {
+      const resources = [
+        { source: 'BackGround.bmp', target: '/monopoly/BackGround.bmp' },
+        { source: 'BackGroundEuro.bmp', target: '/monopoly/BackGroundEuro.bmp' }
+      ];
+      try {
+        Module.FS.mkdir('/monopoly');
+      } catch (e) {}
+      for (const file of resources) {
+        try {
+          Module.FS.stat(file.target);
+          continue;
+        } catch (e) {}
+        const response = await fetch(`resources/${file.source}?${WEB_BUILD_ID}`);
+        if (!response.ok) {
+          window.monopolyLog(`Missing bundled resource ${file.source}; ${response.status}.`);
+          continue;
+        }
+        Module.FS.writeFile(file.target, new Uint8Array(await response.arrayBuffer()));
+        window.monopolyLog(`Mounted bundled resource ${file.target}`);
+      }
+    }
+
+    async function loadIso(file) {
+      setStatus('Reading ISO...');
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      setStatus('Scanning ISO directory...');
+      const isoFiles = parseIso(bytes);
+      const layout = detectAssetLayout(isoFiles);
+      if (!layout) {
+        throw new Error(unsupportedLayoutMessage(isoFiles));
+      }
+      if (!layout.runtimeSupported) {
+        throw new Error([
+          `Detected ${layout.name} (${isoFiles.size} files).`,
+          '',
+          'The current WebAssembly port is wired to the later ArtLib DAT-pack source layout and cannot start from this ISO yet.',
+          'Next porting step: add an asset adapter/converter for the MONOPOLY/ tree or provide a CD/source asset set containing Dat_Mon/*.dat.'
+        ].join('\n'));
+      }
+      for (const name of layout.requiredFiles) {
+        const outPath = writeFileFromIso(bytes, isoFiles, name);
+        window.monopolyLog(`Mounted ${outPath}`);
+      }
+      const isoAiCount = extractAiStrategiesFromIso(bytes, isoFiles);
+      if (isoAiCount > 0) {
+        window.monopolyLog(`Mounted ${isoAiCount} AI strategy files from ISO.`);
+      }
+      await seedSourceAiStrategies();
+      if (!cachedAiStrategiesAvailable()) {
+        throw new Error('AI strategy files are missing. Rebuild the web upload with monopoly/*.AI files or use an ISO that includes them.');
+      }
+      await cacheAssets();
+      assetsReady = true;
+      startBtn.disabled = !runtimeReady;
+      setStatus(`${layout.name} assets mounted and cached.`);
+    }
+
+    function hookInput() {
+      const keyCode = event => event.keyCode || event.which || 0;
+      window.addEventListener('keydown', event => {
+        if (!runtimeReady) return;
+        Module.ccall('monopoly_web_key_down', null, ['number'], [keyCode(event)]);
+        if (!event.ctrlKey && !event.metaKey && !event.altKey && event.key && event.key.length === 1) {
+          Module.ccall('monopoly_web_char', null, ['number'], [event.key.codePointAt(0)]);
+          event.preventDefault();
+        }
+      });
+      window.addEventListener('keyup', event => {
+        if (!runtimeReady) return;
+        Module.ccall('monopoly_web_key_up', null, ['number'], [keyCode(event)]);
+      });
+      canvas.addEventListener('mousemove', event => {
+        if (!runtimeReady) return;
+        const rect = canvas.getBoundingClientRect();
+        const x = Math.round((event.clientX - rect.left) * 800 / rect.width);
+        const y = Math.round((event.clientY - rect.top) * 600 / rect.height);
+        Module.ccall('monopoly_web_mouse_event', null, ['number','number','number','number'], [0, x, y, 0]);
+      });
+      canvas.addEventListener('mousedown', event => {
+        canvas.focus();
+        const rect = canvas.getBoundingClientRect();
+        const x = Math.round((event.clientX - rect.left) * 800 / rect.width);
+        const y = Math.round((event.clientY - rect.top) * 600 / rect.height);
+        Module.ccall('monopoly_web_mouse_event', null, ['number','number','number','number'], [1, x, y, event.button]);
+      });
+      canvas.addEventListener('mouseup', event => {
+        const rect = canvas.getBoundingClientRect();
+        const x = Math.round((event.clientX - rect.left) * 800 / rect.width);
+        const y = Math.round((event.clientY - rect.top) * 600 / rect.height);
+        Module.ccall('monopoly_web_mouse_event', null, ['number','number','number','number'], [2, x, y, event.button]);
+      });
+    }
+
+    window.Module = {
+      canvas,
+      noInitialRun: true,
+      locateFile: path => path === 'monopoly.wasm' ? `monopoly.wasm?${WEB_BUILD_ID}` : path,
+      print: text => window.monopolyLog(String(text)),
+      printErr: text => window.monopolyLog(String(text)),
+      onRuntimeInitialized() {
+        runtimeReady = true;
+        try {
+          Module.FS.mkdir('/cdrom');
+          Module.FS.mount(Module.IDBFS, {}, '/cdrom');
+        } catch (e) {}
+        try {
+          Module.FS.mkdir('/monopoly-user');
+          Module.FS.mount(Module.IDBFS, {}, '/monopoly-user');
+        } catch (e) {}
+        Module.FS.syncfs(true, async err => {
+          if (err) window.monopolyLog(`Cache sync failed: ${err.message || err}`);
+          await seedBundledResources();
+          if (!assetsReady && cachedDatPackAvailable() && !cachedAiStrategiesAvailable()) {
+            await seedSourceAiStrategies();
+            await cacheAssets();
+          }
+          if (!assetsReady && cachedRuntimeAssetsAvailable()) {
+            assetsReady = true;
+            window.monopolyLog('Found cached ArtLib DAT-pack CD assets.');
+          }
+          if (assetsReady) {
+            setStatus('Ready.');
+          } else if (cachedDatPackAvailable()) {
+            setStatus('Cached DAT-pack assets found, but AI strategy files are missing. Rebuild or re-upload the ISO.');
+          } else {
+            setStatus('Upload a Monopoly CD ISO to start.');
+          }
+          startBtn.disabled = !assetsReady;
+        });
+        hookInput();
+      }
+    };
+
+    isoInput.addEventListener('change', async event => {
+      const file = event.target.files && event.target.files[0];
+      if (!file) return;
+      try {
+        await loadIso(file);
+      } catch (err) {
+        assetsReady = false;
+        startBtn.disabled = true;
+        setStatus(err.message || String(err));
+      }
+    });
+
+    startBtn.addEventListener('click', async () => {
+      if (!runtimeReady || !assetsReady) return;
+      startBtn.disabled = true;
+      setStatus('Starting game...');
+      await seedBundledResources();
+      const ok = Module.ccall('monopoly_web_start', 'number', [], []);
+      if (!ok) {
+        startBtn.disabled = false;
+        setStatus('Game startup failed. See log.');
+      } else {
+        setStatus('Running.');
+        if (sidePanel) {
+          setDrawerCollapsed(true);
+        }
+      }
+    });
+
+    clearBtn.addEventListener('click', () => {
+      indexedDB.deleteDatabase('/cdrom');
+      indexedDB.deleteDatabase('/monopoly-user');
+      setStatus('Cache clear requested. Reload the page, then upload the ISO again.');
+    });
+
+    fullBtn.addEventListener('click', () => {
+      const request = viewport.requestFullscreen || viewport.webkitRequestFullscreen;
+      if (request) request.call(viewport);
+    });
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('monopoly_service_worker.js').catch(err => {
+        window.monopolyLog(`Service worker registration failed: ${err.message || err}`);
+      });
+    }
+  </script>
+  <script src="monopoly.js"></script>
+</body>
+</html>
