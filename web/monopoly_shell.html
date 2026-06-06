@@ -14,6 +14,7 @@
       --drawer-width: 320px;
       --drawer-tab-width: 34px;
       --drawer-lip-width: 8px;
+      --requested-game-width: calc(100vw - 36px);
     }
     body {
       margin: 0;
@@ -32,8 +33,8 @@
     }
     .viewport {
       position: relative;
-      width: min(100%, calc(100vh * 4 / 3 - 36px));
-      max-width: 960px;
+      width: min(calc(100vw - 36px), calc((100vh - 36px) * 4 / 3), var(--requested-game-width));
+      max-width: none;
       aspect-ratio: 4 / 3;
       background: #0a0a0a;
       border: 1px solid #2b2b2b;
@@ -45,6 +46,15 @@
       height: 100%;
       border: 0;
       image-rendering: auto;
+    }
+    .viewport:fullscreen {
+      width: min(100vw, calc(100vh * 4 / 3), var(--requested-game-width));
+      max-width: none;
+      border: 0;
+      margin: auto;
+    }
+    .viewport:fullscreen::backdrop {
+      background: #0a0a0a;
     }
     #canvas {
       z-index: 1;
@@ -137,6 +147,18 @@
       gap: 8px;
       flex-wrap: wrap;
     }
+    .control-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 8px;
+    }
+    .control {
+      display: grid;
+      gap: 5px;
+      color: #d8d2d1;
+      font-size: 12px;
+      font-weight: 700;
+    }
     button, label.file {
       border: 1px solid #8f4f4f;
       background: #6f3b3b;
@@ -152,6 +174,29 @@
     }
     input[type=file] {
       display: none;
+    }
+    select {
+      min-height: 34px;
+      border: 1px solid #333333;
+      background: #101010;
+      color: #f0eceb;
+      font: inherit;
+      font-size: 13px;
+      padding: 6px 8px;
+    }
+    .check {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #d8d2d1;
+      font-size: 13px;
+      line-height: 1.2;
+    }
+    .check input {
+      width: 16px;
+      height: 16px;
+      margin: 0;
+      accent-color: #8f4f4f;
     }
     .status {
       padding: 10px;
@@ -195,6 +240,9 @@
       .viewport {
         width: 100%;
       }
+      .viewport:fullscreen {
+        width: min(100vw, calc(100vh * 4 / 3), var(--requested-game-width));
+      }
       .log {
         min-height: 180px;
         max-height: 45vh;
@@ -220,6 +268,24 @@
       <button id="startBtn" disabled>Start</button>
       <button id="fullBtn">Fullscreen</button>
       <button id="clearBtn">Reset Game File Cache</button>
+    </div>
+    <div class="control-grid">
+      <label class="control" for="resolutionSelect">
+        Resolution
+        <select id="resolutionSelect">
+          <option value="fit">Fit display</option>
+          <option value="1">800x600</option>
+          <option value="1.5">1200x900</option>
+          <option value="2">1600x1200</option>
+          <option value="3">2400x1800</option>
+          <option value="4">3200x2400</option>
+        </select>
+      </label>
+      <label class="check">
+        <input id="smoothScale" type="checkbox" checked>
+        <span>Smooth upscale</span>
+      </label>
+      <div id="resolutionReadout" class="build">Output 800x600</div>
     </div>
     <div id="status" class="status">Loading WebAssembly runtime...</div>
     <div id="log" class="log" aria-live="polite"></div>
@@ -281,8 +347,15 @@
     const viewport = document.getElementById('viewport');
     const canvas = document.getElementById('canvas');
     const presentCanvas = document.getElementById('presentCanvas');
+    const resolutionSelect = document.getElementById('resolutionSelect');
+    const smoothScaleInput = document.getElementById('smoothScale');
+    const resolutionReadout = document.getElementById('resolutionReadout');
     const presentContext = presentCanvas.getContext('2d');
-    const WEB_BUILD_ID = 'wasm-2026.23.1'; // Year.WeekNo.BuildNo.
+    const BASE_WIDTH = 800;
+    const BASE_HEIGHT = 600;
+    const MAX_PRESENTATION_SCALE = 4;
+    const RESOLUTION_SCALE_VALUES = new Set(['fit', '1', '1.5', '2', '3', '4']);
+    const WEB_BUILD_ID = 'wasm-2026.23.2'; // Year.WeekNo.BuildNo.
     const urlParams = new URLSearchParams(window.location.search);
     const WEB_VISUAL_PROBE = urlParams.has('probe');
     const WEB_LOG_SINK = urlParams.get('logSink');
@@ -363,6 +436,141 @@
     let presenterProbeLogged = false;
     let presenter2DLogged = false;
     let presentImageData = null;
+    let presentSourceCanvas = null;
+    let presentSourceContext = null;
+    let presentFrameWidth = 0;
+    let presentFrameHeight = 0;
+
+    function normalizeResolutionScale(value) {
+      const scale = String(value || '').toLowerCase();
+      return RESOLUTION_SCALE_VALUES.has(scale) ? scale : 'fit';
+    }
+
+    function readStoredResolutionScale() {
+      const queryScale = normalizeResolutionScale(urlParams.get('resolution') || urlParams.get('scale'));
+      if (queryScale !== 'fit' || urlParams.has('resolution') || urlParams.has('scale')) {
+        return queryScale;
+      }
+      try {
+        return normalizeResolutionScale(localStorage.getItem('monopolyResolutionScale'));
+      } catch (_err) {
+        return 'fit';
+      }
+    }
+
+    function readStoredSmoothScale() {
+      try {
+        const stored = localStorage.getItem('monopolySmoothUpscale');
+        if (stored === '0') return false;
+        if (stored === '1') return true;
+      } catch (_err) {
+      }
+      return true;
+    }
+
+    function requestedViewportWidth(scale) {
+      if (scale === 'fit') return 'calc(100vw - 36px)';
+      return `${Math.round(BASE_WIDTH * Number(scale))}px`;
+    }
+
+    function computePresentationScale() {
+      const selectedScale = normalizeResolutionScale(resolutionSelect.value);
+      if (selectedScale !== 'fit') {
+        return Number(selectedScale);
+      }
+      const rect = viewport.getBoundingClientRect();
+      const cssScale = rect.width > 0 ? rect.width / BASE_WIDTH : 1;
+      const deviceScale = window.devicePixelRatio || 1;
+      return Math.min(MAX_PRESENTATION_SCALE, Math.max(1, cssScale * deviceScale));
+    }
+
+    function configureCanvasSmoothing() {
+      const smooth = smoothScaleInput.checked;
+      const rendering = smooth ? 'auto' : 'pixelated';
+      canvas.style.imageRendering = rendering;
+      presentCanvas.style.imageRendering = rendering;
+      if (presentContext) {
+        presentContext.imageSmoothingEnabled = smooth;
+      }
+      if (presentSourceContext) {
+        presentSourceContext.imageSmoothingEnabled = smooth;
+      }
+      return smooth;
+    }
+
+    function resizePresentationCanvas() {
+      const scale = computePresentationScale();
+      const outputWidth = Math.max(BASE_WIDTH, Math.round(BASE_WIDTH * scale));
+      const outputHeight = Math.max(BASE_HEIGHT, Math.round(BASE_HEIGHT * scale));
+      if (presentCanvas.width !== outputWidth || presentCanvas.height !== outputHeight) {
+        presentCanvas.width = outputWidth;
+        presentCanvas.height = outputHeight;
+      }
+      configureCanvasSmoothing();
+      resolutionReadout.textContent = `Output ${outputWidth}x${outputHeight}`;
+      return { width: outputWidth, height: outputHeight };
+    }
+
+    function ensurePresentSource(width, height) {
+      if (!presentSourceCanvas) {
+        presentSourceCanvas = document.createElement('canvas');
+        presentSourceContext = presentSourceCanvas.getContext('2d');
+      }
+      if (!presentSourceContext) return null;
+      if (presentSourceCanvas.width !== width || presentSourceCanvas.height !== height) {
+        presentSourceCanvas.width = width;
+        presentSourceCanvas.height = height;
+        presentImageData = null;
+      }
+      configureCanvasSmoothing();
+      return presentSourceContext;
+    }
+
+    function drawPresentSourceToTarget() {
+      if (!presentContext || !presentSourceCanvas || !presentFrameWidth || !presentFrameHeight) return;
+      resizePresentationCanvas();
+      if (presentCanvas.width === presentFrameWidth && presentCanvas.height === presentFrameHeight && presentImageData) {
+        presentContext.putImageData(presentImageData, 0, 0);
+        return;
+      }
+      presentContext.clearRect(0, 0, presentCanvas.width, presentCanvas.height);
+      presentContext.drawImage(
+        presentSourceCanvas,
+        0,
+        0,
+        presentFrameWidth,
+        presentFrameHeight,
+        0,
+        0,
+        presentCanvas.width,
+        presentCanvas.height
+      );
+    }
+
+    function applyResolutionSettings(options = {}) {
+      const persist = options.persist !== false;
+      const selectedScale = normalizeResolutionScale(resolutionSelect.value);
+      document.documentElement.style.setProperty('--requested-game-width', requestedViewportWidth(selectedScale));
+      if (persist) {
+        try {
+          localStorage.setItem('monopolyResolutionScale', selectedScale);
+          localStorage.setItem('monopolySmoothUpscale', smoothScaleInput.checked ? '1' : '0');
+        } catch (_err) {
+        }
+      }
+      requestAnimationFrame(() => {
+        resizePresentationCanvas();
+        drawPresentSourceToTarget();
+      });
+    }
+
+    resolutionSelect.value = readStoredResolutionScale();
+    smoothScaleInput.checked = readStoredSmoothScale();
+    resolutionSelect.addEventListener('change', () => applyResolutionSettings());
+    smoothScaleInput.addEventListener('change', () => applyResolutionSettings());
+    window.addEventListener('resize', () => applyResolutionSettings({ persist: false }));
+    document.addEventListener('fullscreenchange', () => applyResolutionSettings({ persist: false }));
+    applyResolutionSettings({ persist: false });
 
     function compilePresenterShader(gl, type, source) {
       const shader = gl.createShader(type);
@@ -474,11 +682,16 @@
           presentContext.fillRect(0, 0, presentCanvas.width, presentCanvas.height);
           return;
         }
+        const sourceContext = ensurePresentSource(width, height);
+        if (!sourceContext) return;
         if (!presentImageData || presentImageData.width !== width || presentImageData.height !== height) {
-          presentImageData = presentContext.createImageData(width, height);
+          presentImageData = sourceContext.createImageData(width, height);
         }
         presentImageData.data.set(rgba);
-        presentContext.putImageData(presentImageData, 0, 0);
+        sourceContext.putImageData(presentImageData, 0, 0);
+        presentFrameWidth = width;
+        presentFrameHeight = height;
+        drawPresentSourceToTarget();
         return;
       }
       const presenter = getRGB565Presenter(width, height);
@@ -787,21 +1000,21 @@
       canvas.addEventListener('mousemove', event => {
         if (!runtimeReady) return;
         const rect = canvas.getBoundingClientRect();
-        const x = Math.round((event.clientX - rect.left) * 800 / rect.width);
-        const y = Math.round((event.clientY - rect.top) * 600 / rect.height);
+        const x = Math.round((event.clientX - rect.left) * BASE_WIDTH / rect.width);
+        const y = Math.round((event.clientY - rect.top) * BASE_HEIGHT / rect.height);
         Module.ccall('monopoly_web_mouse_event', null, ['number','number','number','number'], [0, x, y, 0]);
       });
       canvas.addEventListener('mousedown', event => {
         canvas.focus();
         const rect = canvas.getBoundingClientRect();
-        const x = Math.round((event.clientX - rect.left) * 800 / rect.width);
-        const y = Math.round((event.clientY - rect.top) * 600 / rect.height);
+        const x = Math.round((event.clientX - rect.left) * BASE_WIDTH / rect.width);
+        const y = Math.round((event.clientY - rect.top) * BASE_HEIGHT / rect.height);
         Module.ccall('monopoly_web_mouse_event', null, ['number','number','number','number'], [1, x, y, event.button]);
       });
       canvas.addEventListener('mouseup', event => {
         const rect = canvas.getBoundingClientRect();
-        const x = Math.round((event.clientX - rect.left) * 800 / rect.width);
-        const y = Math.round((event.clientY - rect.top) * 600 / rect.height);
+        const x = Math.round((event.clientX - rect.left) * BASE_WIDTH / rect.width);
+        const y = Math.round((event.clientY - rect.top) * BASE_HEIGHT / rect.height);
         Module.ccall('monopoly_web_mouse_event', null, ['number','number','number','number'], [2, x, y, event.button]);
       });
     }
