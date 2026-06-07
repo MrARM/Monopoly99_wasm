@@ -12106,6 +12106,11 @@ static BOOL LI_SEQNCR_RestartMouseGroup (void)
 BOOL LE_SEQNCR_InitialiseMouseGroupingSequence (
 LE_REND_RenderSlotSet RenderSlotSetToUse, UNS16 Priority)
 {
+#if MONOPOLY_WEB
+  (void) RenderSlotSetToUse;
+  (void) Priority;
+  return TRUE;
+#else
 #pragma pack(push,1)
   struct GroupingStruct {
     LE_CHUNK_HeaderRecord                 groupingHeader;
@@ -12163,6 +12168,7 @@ LE_REND_RenderSlotSet RenderSlotSetToUse, UNS16 Priority)
 
   LE_SEQNCR_RemoveMouseGroupingSequence ();
   return FALSE;
+#endif
 }
 #endif // CE_ARTLIB_EnableSystemMouse
 
@@ -12175,6 +12181,9 @@ LE_REND_RenderSlotSet RenderSlotSetToUse, UNS16 Priority)
 
 void LE_SEQNCR_RemoveMouseGroupingSequence (void)
 {
+#if MONOPOLY_WEB
+  return;
+#else
   LE_DATA_DataId TempDataID;
 
   if (LE_SEQNCR_MouseGroupingSequenceDataID == LE_DATA_EmptyItem)
@@ -12195,6 +12204,7 @@ void LE_SEQNCR_RemoveMouseGroupingSequence (void)
   LE_SEQNCR_ProcessUserCommands ();
 
   LE_DATA_FreeRuntimeDataID (TempDataID);
+#endif
 }
 #endif // CE_ARTLIB_EnableSystemMouse
 
@@ -12214,6 +12224,14 @@ BOOL LE_SEQNCR_AddMouseSubSequenceTheWorks (LE_DATA_DataId MouseSequence,
 UNS16 MousePriority, INT16 HotSpotXOffset, INT16 HotSpotYOffset,
 BOOL DeleteOtherMouseSequences)
 {
+#if MONOPOLY_WEB
+  (void) MouseSequence;
+  (void) MousePriority;
+  (void) HotSpotXOffset;
+  (void) HotSpotYOffset;
+  (void) DeleteOtherMouseSequences;
+  return TRUE;
+#else
   TYPE_Matrix2D                 OffsetMatrix;
   TYPE_Point2D                  OffsetPoint;
   BOOL                          ReturnCode = FALSE;
@@ -12255,6 +12273,7 @@ BOOL DeleteOtherMouseSequences)
     NULL, NULL,
     DefaultPreloadFlagForStartSequence, DefaultDisposalFlagForStartSequence,
     DefaultUseRefFlagForStartSequence, LE_SEQNCR_DropDefault);
+#endif
 }
 #endif // CE_ARTLIB_EnableSystemMouse
 
