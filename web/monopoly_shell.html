@@ -12,7 +12,7 @@
       background: #0a0a0a;
       color: #ece9e8;
       --drawer-width: 320px;
-      --drawer-tab-width: 34px;
+      --drawer-tab-width: 46px;
       --drawer-lip-width: 8px;
       --requested-game-width: calc(100vw - 36px);
     }
@@ -104,27 +104,90 @@
       top: 50%;
       transform: translateY(-50%);
       width: var(--drawer-tab-width);
-      height: 122px;
-      border: 1px solid #8f4f4f;
+      height: 54px;
+      border: 1px solid rgba(230, 230, 230, 0.42);
       border-right: 0;
       border-radius: 10px 0 0 10px;
-      background: #6f3b3b;
-      color: #f7f3f2;
+      background: rgba(92, 92, 92, 0.62);
+      color: rgba(242, 242, 242, 0.88);
       display: grid;
       place-items: center;
-      writing-mode: vertical-rl;
-      text-orientation: mixed;
-      letter-spacing: 0.12em;
-      font-size: 11px;
-      font-weight: 700;
       cursor: pointer;
       user-select: none;
       padding: 0;
-      transition: background-color 160ms ease, border-color 160ms ease;
+      box-shadow: -8px 0 18px rgba(0, 0, 0, 0.28);
+      backdrop-filter: blur(8px);
+      transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
     }
     .drawer-tab:hover {
-      background: #7e4545;
-      border-color: #a45f5f;
+      background: rgba(118, 118, 118, 0.72);
+      border-color: rgba(242, 242, 242, 0.56);
+      color: rgba(248, 248, 248, 0.94);
+    }
+    .drawer-tab:focus-visible {
+      outline: 2px solid rgba(242, 242, 242, 0.8);
+      outline-offset: 2px;
+    }
+    .drawer-tab svg {
+      width: 27px;
+      height: 27px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      grid-area: 1 / 1;
+    }
+    .drawer-tab .drawer-icon-show {
+      display: none;
+    }
+    body.drawer-collapsed .drawer-tab .drawer-icon-hide {
+      display: none;
+    }
+    body.drawer-collapsed .drawer-tab .drawer-icon-show {
+      display: block;
+    }
+    .keyboard-tab {
+      position: fixed;
+      left: 0;
+      bottom: max(24px, env(safe-area-inset-bottom));
+      z-index: 24;
+      width: 54px;
+      height: 46px;
+      border: 1px solid rgba(230, 230, 230, 0.42);
+      border-left: 0;
+      border-radius: 0 10px 10px 0;
+      background: rgba(92, 92, 92, 0.62);
+      color: rgba(242, 242, 242, 0.88);
+      display: none;
+      place-items: center;
+      padding: 0;
+      box-shadow: 8px 0 18px rgba(0, 0, 0, 0.28);
+      backdrop-filter: blur(8px);
+      cursor: pointer;
+      user-select: none;
+      transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
+    }
+    body.mobile-keyboard-enabled .keyboard-tab {
+      display: grid;
+    }
+    .keyboard-tab:hover {
+      background: rgba(118, 118, 118, 0.72);
+      border-color: rgba(242, 242, 242, 0.56);
+      color: rgba(248, 248, 248, 0.94);
+    }
+    .keyboard-tab:focus-visible {
+      outline: 2px solid rgba(242, 242, 242, 0.8);
+      outline-offset: 2px;
+    }
+    .keyboard-tab svg {
+      width: 27px;
+      height: 27px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
     }
     h1 {
       font-size: 18px;
@@ -198,6 +261,26 @@
       margin: 0;
       accent-color: #8f4f4f;
     }
+    .mobile-keyboard-proxy {
+      position: fixed;
+      left: 0;
+      bottom: 0;
+      width: 1px;
+      height: 1px;
+      min-width: 1px;
+      min-height: 1px;
+      padding: 0;
+      border: 0;
+      outline: 0;
+      opacity: .01;
+      color: transparent;
+      background: transparent;
+      caret-color: transparent;
+      resize: none;
+      pointer-events: none;
+      font-size: 16px;
+      line-height: 16px;
+    }
     .status {
       padding: 10px;
       border: 1px solid #2d2d2d;
@@ -247,6 +330,9 @@
         min-height: 180px;
         max-height: 45vh;
       }
+      .keyboard-tab {
+        bottom: max(18px, env(safe-area-inset-bottom));
+      }
     }
   </style>
 </head>
@@ -257,8 +343,24 @@
       <canvas id="presentCanvas" width="800" height="600" aria-hidden="true"></canvas>
     </div>
   </main>
+  <button id="mobileKeyboardButton" class="keyboard-tab" type="button" aria-label="Show mobile keyboard" title="Show mobile keyboard" hidden>
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <rect x="3" y="5" width="18" height="14" rx="2"></rect>
+      <path d="M7 9h.01M10 9h.01M13 9h.01M16 9h.01M7 12h.01M10 12h.01M13 12h.01M16 12h.01M8 15h8"></path>
+    </svg>
+  </button>
   <aside id="sidePanel">
-    <button id="drawerToggle" class="drawer-tab" type="button" aria-expanded="true" aria-label="Hide menu">HIDE</button>
+    <button id="drawerToggle" class="drawer-tab" type="button" aria-expanded="true" aria-label="Hide menu" title="Hide menu">
+      <svg class="drawer-icon-hide" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M15 6l-6 6 6 6"></path>
+        <path d="M5 6v12"></path>
+      </svg>
+      <svg class="drawer-icon-show" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M4 7h16"></path>
+        <path d="M4 12h16"></path>
+        <path d="M4 17h16"></path>
+      </svg>
+    </button>
     <div>
       <h1>Monopoly(1999) in WebAssembly</h1>
       <p>Upload a legally obtained CD ISO. Assets are unpacked locally in your browser.</p>
@@ -285,11 +387,16 @@
         <input id="smoothScale" type="checkbox" checked>
         <span>Smooth upscale</span>
       </label>
+      <label class="check">
+        <input id="mobileKeyboardToggle" type="checkbox">
+        <span>Mobile keyboard</span>
+      </label>
       <div id="resolutionReadout" class="build">Output 800x600</div>
     </div>
     <div id="status" class="status">Loading WebAssembly runtime...</div>
     <div id="log" class="log" aria-live="polite"></div>
   </aside>
+  <textarea id="mobileKeyboardInput" class="mobile-keyboard-proxy" rows="1" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" inputmode="text" enterkeyhint="done" aria-label="Mobile keyboard input" tabindex="-1"></textarea>
   <script>
     const DAT_PACK_FILES = [
       'DAT_MON/DAT_MAIN.DAT',
@@ -349,11 +456,18 @@
     const presentCanvas = document.getElementById('presentCanvas');
     const resolutionSelect = document.getElementById('resolutionSelect');
     const smoothScaleInput = document.getElementById('smoothScale');
+    const mobileKeyboardToggle = document.getElementById('mobileKeyboardToggle');
+    const mobileKeyboardButton = document.getElementById('mobileKeyboardButton');
+    const mobileKeyboardInput = document.getElementById('mobileKeyboardInput');
     const resolutionReadout = document.getElementById('resolutionReadout');
     const presentContext = presentCanvas.getContext('2d');
     const BASE_WIDTH = 800;
     const BASE_HEIGHT = 600;
     const MAX_PRESENTATION_SCALE = 4;
+    const KEY_BACKSPACE = 8;
+    const KEY_ENTER = 13;
+    const KEY_SPACE = 32;
+    const KEY_DELETE = 46;
     const RESOLUTION_SCALE_VALUES = new Set(['fit', '1', '1.5', '2', '3', '4']);
     const WEB_BUILD_ID = 'wasm-2026.23.2'; // Year.WeekNo.BuildNo.
     const urlParams = new URLSearchParams(window.location.search);
@@ -362,12 +476,15 @@
 
     let runtimeReady = false;
     let assetsReady = false;
+    let composingMobileKeyboardText = false;
+    let skipNextMobileKeyboardInput = false;
+    let lastHandledBeforeInputTime = 0;
 
     function setDrawerCollapsed(collapsed) {
       document.body.classList.toggle('drawer-collapsed', collapsed);
-      drawerToggle.textContent = collapsed ? 'MENU' : 'HIDE';
       drawerToggle.setAttribute('aria-expanded', String(!collapsed));
       drawerToggle.setAttribute('aria-label', collapsed ? 'Show menu' : 'Hide menu');
+      drawerToggle.title = collapsed ? 'Show menu' : 'Hide menu';
     }
 
     drawerToggle.addEventListener('click', () => {
@@ -377,6 +494,72 @@
 
     function setStatus(text) {
       statusEl.textContent = text;
+    }
+
+    function storageGet(key) {
+      try {
+        return localStorage.getItem(key);
+      } catch (_err) {
+        return null;
+      }
+    }
+
+    function storageSet(key, value) {
+      try {
+        localStorage.setItem(key, value);
+      } catch (_err) {
+      }
+    }
+
+    function isLikelyMobileDevice() {
+      const ua = navigator.userAgent || '';
+      const platform = navigator.platform || '';
+      const uaMobile = /Android|iPhone|iPad|iPod|Mobile|Windows Phone|Kindle|Silk/i.test(ua);
+      const iPadDesktopMode = platform === 'MacIntel' && (navigator.maxTouchPoints || 0) > 1;
+      const coarsePointer = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+      const touchCapable = ('ontouchstart' in window) || (navigator.maxTouchPoints || 0) > 0;
+      return uaMobile || iPadDesktopMode || (touchCapable && coarsePointer);
+    }
+
+    function readStoredMobileKeyboardPreference() {
+      const stored = storageGet('monopolyUseMobileKeyboard');
+      if (stored === '1') return true;
+      if (stored === '0') return false;
+      return isLikelyMobileDevice();
+    }
+
+    function mobileKeyboardEnabled() {
+      return !!(mobileKeyboardToggle && mobileKeyboardToggle.checked);
+    }
+
+    function resetMobileKeyboardInput() {
+      if (mobileKeyboardInput) {
+        mobileKeyboardInput.value = '';
+      }
+    }
+
+    function setMobileKeyboardEnabled(enabled, persist) {
+      if (!mobileKeyboardToggle) return;
+      mobileKeyboardToggle.checked = !!enabled;
+      document.body.classList.toggle('mobile-keyboard-enabled', !!enabled);
+      if (mobileKeyboardButton) {
+        mobileKeyboardButton.hidden = !enabled;
+        mobileKeyboardButton.disabled = !enabled;
+        mobileKeyboardButton.setAttribute('aria-hidden', String(!enabled));
+      }
+      if (persist) {
+        storageSet('monopolyUseMobileKeyboard', enabled ? '1' : '0');
+      }
+      if (!enabled && mobileKeyboardInput && document.activeElement === mobileKeyboardInput) {
+        mobileKeyboardInput.blur();
+      }
+    }
+
+    setMobileKeyboardEnabled(readStoredMobileKeyboardPreference(), false);
+    if (mobileKeyboardToggle) {
+      mobileKeyboardToggle.addEventListener('change', () => {
+        setMobileKeyboardEnabled(mobileKeyboardToggle.checked, true);
+      });
     }
 
     let logCount = 0;
@@ -983,19 +1166,173 @@
       setStatus(`${layout.name} assets mounted and cached.`);
     }
 
+    function sendKeyDown(code) {
+      if (!runtimeReady || !code) return;
+      Module.ccall('monopoly_web_key_down', null, ['number'], [code]);
+    }
+
+    function sendKeyUp(code) {
+      if (!runtimeReady || !code) return;
+      Module.ccall('monopoly_web_key_up', null, ['number'], [code]);
+    }
+
+    function sendChar(code) {
+      if (!runtimeReady || !code) return;
+      Module.ccall('monopoly_web_char', null, ['number'], [code]);
+    }
+
+    function sendKeyTap(code) {
+      sendKeyDown(code);
+      sendKeyUp(code);
+    }
+
+    function virtualKeyCodeForTextCharacter(character) {
+      if (!character) return 0;
+      if (character === ' ') return KEY_SPACE;
+      const code = character.codePointAt(0);
+      if (code >= 48 && code <= 57) return code;
+      if (code >= 65 && code <= 90) return code;
+      if (code >= 97 && code <= 122) return code - 32;
+      return 0;
+    }
+
+    function sendTextCharacter(character) {
+      if (!character) return;
+      if (character === '\n' || character === '\r') {
+        sendKeyTap(KEY_ENTER);
+        return;
+      }
+      const code = character.codePointAt(0);
+      if (!code || code < KEY_SPACE) return;
+      const keyCode = virtualKeyCodeForTextCharacter(character);
+      if (keyCode) sendKeyDown(keyCode);
+      sendChar(code);
+      if (keyCode) sendKeyUp(keyCode);
+    }
+
+    function sendTextInput(text) {
+      for (const character of Array.from(String(text || ''))) {
+        sendTextCharacter(character);
+      }
+    }
+
+    function focusMobileKeyboardInput() {
+      if (!mobileKeyboardEnabled() || !mobileKeyboardInput) return false;
+      resetMobileKeyboardInput();
+      try {
+        mobileKeyboardInput.focus({ preventScroll: true });
+      } catch (_err) {
+        mobileKeyboardInput.focus();
+      }
+      return document.activeElement === mobileKeyboardInput;
+    }
+
+    function targetIsShellTextInput(target) {
+      if (!target) return false;
+      if (target === mobileKeyboardInput) return true;
+      if (target.isContentEditable) return true;
+      const tagName = target.tagName;
+      return tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT';
+    }
+
+    function handleMobileKeyboardBeforeInput(event) {
+      if (!runtimeReady || !mobileKeyboardEnabled() || event.target !== mobileKeyboardInput) return;
+      if (event.isComposing || composingMobileKeyboardText) return;
+
+      const inputType = event.inputType || '';
+      let handled = true;
+      if ((inputType.startsWith('insert') || inputType === '') && event.data) {
+        sendTextInput(event.data);
+      } else if (inputType === 'insertLineBreak' || inputType === 'insertParagraph') {
+        sendKeyTap(KEY_ENTER);
+      } else if (inputType === 'deleteContentBackward') {
+        sendKeyTap(KEY_BACKSPACE);
+      } else if (inputType === 'deleteContentForward') {
+        sendKeyTap(KEY_DELETE);
+      } else {
+        handled = false;
+      }
+
+      if (handled) {
+        lastHandledBeforeInputTime = performance.now();
+        event.preventDefault();
+        resetMobileKeyboardInput();
+      }
+    }
+
+    function handleMobileKeyboardInput(event) {
+      if (!runtimeReady || !mobileKeyboardEnabled() || event.target !== mobileKeyboardInput) return;
+      if (composingMobileKeyboardText) return;
+      if (skipNextMobileKeyboardInput) {
+        skipNextMobileKeyboardInput = false;
+        resetMobileKeyboardInput();
+        return;
+      }
+      if (performance.now() - lastHandledBeforeInputTime < 100) {
+        resetMobileKeyboardInput();
+        return;
+      }
+      const value = mobileKeyboardInput.value;
+      if (value) {
+        sendTextInput(value);
+        resetMobileKeyboardInput();
+      }
+    }
+
+    function handleMobileKeyboardKeyDown(event) {
+      if (!runtimeReady || !mobileKeyboardEnabled() || event.target !== mobileKeyboardInput) return;
+      if (event.isComposing || composingMobileKeyboardText) return;
+
+      if (event.key === 'Backspace') {
+        sendKeyTap(KEY_BACKSPACE);
+      } else if (event.key === 'Delete') {
+        sendKeyTap(KEY_DELETE);
+      } else if (event.key === 'Enter') {
+        sendKeyTap(KEY_ENTER);
+      } else {
+        return;
+      }
+
+      event.preventDefault();
+      resetMobileKeyboardInput();
+    }
+
     function hookInput() {
       const keyCode = event => event.keyCode || event.which || 0;
+      if (mobileKeyboardButton) {
+        mobileKeyboardButton.addEventListener('pointerdown', event => {
+          if (focusMobileKeyboardInput()) event.preventDefault();
+        });
+        mobileKeyboardButton.addEventListener('click', event => {
+          if (focusMobileKeyboardInput()) event.preventDefault();
+        });
+      }
+      mobileKeyboardInput.addEventListener('beforeinput', handleMobileKeyboardBeforeInput);
+      mobileKeyboardInput.addEventListener('input', handleMobileKeyboardInput);
+      mobileKeyboardInput.addEventListener('keydown', handleMobileKeyboardKeyDown);
+      mobileKeyboardInput.addEventListener('compositionstart', event => {
+        if (event.target === mobileKeyboardInput) composingMobileKeyboardText = true;
+      });
+      mobileKeyboardInput.addEventListener('compositionend', event => {
+        if (event.target !== mobileKeyboardInput) return;
+        composingMobileKeyboardText = false;
+        if (event.data) {
+          sendTextInput(event.data);
+          skipNextMobileKeyboardInput = true;
+        }
+        resetMobileKeyboardInput();
+      });
       window.addEventListener('keydown', event => {
-        if (!runtimeReady) return;
-        Module.ccall('monopoly_web_key_down', null, ['number'], [keyCode(event)]);
+        if (!runtimeReady || targetIsShellTextInput(event.target)) return;
+        sendKeyDown(keyCode(event));
         if (!event.ctrlKey && !event.metaKey && !event.altKey && event.key && event.key.length === 1) {
-          Module.ccall('monopoly_web_char', null, ['number'], [event.key.codePointAt(0)]);
+          sendChar(event.key.codePointAt(0));
           event.preventDefault();
         }
       });
       window.addEventListener('keyup', event => {
-        if (!runtimeReady) return;
-        Module.ccall('monopoly_web_key_up', null, ['number'], [keyCode(event)]);
+        if (!runtimeReady || targetIsShellTextInput(event.target)) return;
+        sendKeyUp(keyCode(event));
       });
       canvas.addEventListener('mousemove', event => {
         if (!runtimeReady) return;

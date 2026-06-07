@@ -22,7 +22,6 @@ Regarding the legality of hosting this source code, it was publicly released and
 - 2D board mode (Render bug, will fix eventually.)
 - Intro video (Not implemented. If you want to watch it: https://www.youtube.com/watch?v=0uwFPGLmydo)
 - Some issues exist in the main menu that don't prevent gameplay (compositing issues, buttons sometimes don't respond.)
-- Devices without a physical keyboard may have issues typing in a name to add a human player.
 
 Expect this to be a bit buggy, this was never meant to run in a web browser on hardware newer than the 2000s. Please submit bug reports!
 
