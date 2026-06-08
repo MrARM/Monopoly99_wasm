@@ -50,8 +50,7 @@ jobs:
         run: |
           source "${EMSDK_ROOT}/emsdk_env.sh"
           emcmake cmake -S . -B build/web-emscripten \
-            -DMONOPOLY_PLATFORM=web \
-            -DCMAKE_BUILD_TYPE=Release
+            -DMONOPOLY_PLATFORM=web
       - name: Build
         shell: bash
         run: |
