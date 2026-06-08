@@ -1,0 +1,91 @@
+name: Build and deploy GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build WebAssembly bundle
+    runs-on: ubuntu-latest
+    env:
+      EMSDK_ROOT: ${{ github.workspace }}/.ci/emsdk
+      EMSDK_VERSION: latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Cache Emscripten SDK
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.EMSDK_ROOT }}
+          key: ${{ runner.os }}-emsdk-${{ env.EMSDK_VERSION }}
+
+      - name: Install Emscripten SDK
+        shell: bash
+        run: |
+          mkdir -p "$(dirname "${EMSDK_ROOT}")"
+          if [ ! -d "${EMSDK_ROOT}/.git" ]; then
+            git clone https://github.com/emscripten-core/emsdk.git "${EMSDK_ROOT}"
+          else
+            git -C "${EMSDK_ROOT}" pull --ff-only
+          fi
+          "${EMSDK_ROOT}/emsdk" install "${EMSDK_VERSION}"
+          "${EMSDK_ROOT}/emsdk" activate "${EMSDK_VERSION}"
+      - name: Configure CMake
+        shell: bash
+        run: |
+          source "${EMSDK_ROOT}/emsdk_env.sh"
+          emcmake cmake -S . -B build/web-emscripten \
+            -DMONOPOLY_PLATFORM=web \
+            -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        shell: bash
+        run: |
+          source "${EMSDK_ROOT}/emsdk_env.sh"
+          cmake --build build/web-emscripten --target monopoly --parallel 4
+      - name: Verify Pages bundle
+        shell: bash
+        run: |
+          test -f build/web-emscripten/upload/index.html
+          test -f build/web-emscripten/upload/monopoly.js
+          test -f build/web-emscripten/upload/monopoly.wasm
+          node --check build/web-emscripten/upload/monopoly.js
+          touch build/web-emscripten/upload/.nojekyll
+      - name: Configure GitHub Pages
+        if: github.event_name != 'pull_request'
+        uses: actions/configure-pages@v5
+
+      - name: Upload GitHub Pages artifact
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: build/web-emscripten/upload
+
+  deploy:
+    name: Deploy GitHub Pages
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
