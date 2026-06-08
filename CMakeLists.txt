@@ -25,6 +25,32 @@ file(MAKE_DIRECTORY "${MONOPOLY_WEB_UPLOAD_DIR}")
 
 set(MONOPOLY_GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
 set(MONOPOLY_GENERATED_BLTINC "${MONOPOLY_GENERATED_DIR}/L_BLTINC.i")
+set(MONOPOLY_CASEFOLD_INCLUDE_DIR "${MONOPOLY_GENERATED_DIR}/casefold")
+set(MONOPOLY_CASEFOLD_STAMP "${MONOPOLY_GENERATED_DIR}/casefold.stamp")
+set(MONOPOLY_CASEFOLD_INCLUDE_DIRS
+    "${MONOPOLY_CASEFOLD_INCLUDE_DIR}"
+    "${MONOPOLY_CASEFOLD_INCLUDE_DIR}/monopoly"
+    "${MONOPOLY_CASEFOLD_INCLUDE_DIR}/monopoly/Dat_Mon"
+    "${MONOPOLY_CASEFOLD_INCLUDE_DIR}/monopoly/dat_mon"
+    "${MONOPOLY_CASEFOLD_INCLUDE_DIR}/artlib"
+    "${MONOPOLY_CASEFOLD_INCLUDE_DIR}/ArtLib"
+    "${MONOPOLY_CASEFOLD_INCLUDE_DIR}/PC3D"
+    "${MONOPOLY_CASEFOLD_INCLUDE_DIR}/Pc3D"
+    "${MONOPOLY_CASEFOLD_INCLUDE_DIR}/pc3D"
+    "${MONOPOLY_CASEFOLD_INCLUDE_DIR}/pc3d"
+    "${MONOPOLY_CASEFOLD_INCLUDE_DIR}/ZLib"
+    "${MONOPOLY_CASEFOLD_INCLUDE_DIR}/zlib"
+    "${MONOPOLY_CASEFOLD_INCLUDE_DIR}/web"
+    "${MONOPOLY_CASEFOLD_INCLUDE_DIR}/web/compat"
+    "${MONOPOLY_CASEFOLD_INCLUDE_DIR}/PC3D/vrml2"
+    "${MONOPOLY_CASEFOLD_INCLUDE_DIR}/PC3D/xvrml"
+)
+file(MAKE_DIRECTORY ${MONOPOLY_CASEFOLD_INCLUDE_DIRS})
+
+set(MONOPOLY_CASEFOLD_INCLUDE_ARGS)
+foreach(MONOPOLY_CASEFOLD_INCLUDE_DIR_ENTRY IN LISTS MONOPOLY_CASEFOLD_INCLUDE_DIRS)
+    list(APPEND MONOPOLY_CASEFOLD_INCLUDE_ARGS -I "${MONOPOLY_CASEFOLD_INCLUDE_DIR_ENTRY}")
+endforeach()
 
 set(MONOPOLY_PREPROCESS_COMMAND ${CMAKE_CXX_COMPILER})
 if(EMSCRIPTEN)
@@ -32,6 +58,17 @@ if(EMSCRIPTEN)
         ${CMAKE_COMMAND} -E env "EM_CACHE=${MONOPOLY_EMSCRIPTEN_CACHE}" ${CMAKE_CXX_COMPILER}
     )
 endif()
+
+add_custom_target(monopoly_casefold_include_overlay
+    COMMAND ${Python3_EXECUTABLE}
+        "${CMAKE_CURRENT_SOURCE_DIR}/cmake/generate_casefold_include_overlay.py"
+        --source-root "${CMAKE_CURRENT_SOURCE_DIR}"
+        --output-root "${MONOPOLY_CASEFOLD_INCLUDE_DIR}"
+        --stamp "${MONOPOLY_CASEFOLD_STAMP}"
+    BYPRODUCTS "${MONOPOLY_CASEFOLD_STAMP}"
+    COMMENT "Generating case-insensitive include overlay"
+    VERBATIM
+)
 
 add_custom_command(
     OUTPUT "${MONOPOLY_GENERATED_BLTINC}"
@@ -41,6 +78,7 @@ add_custom_command(
         -C
         -Wno-nonportable-include-path
         -Wno-invalid-source-encoding
+        ${MONOPOLY_CASEFOLD_INCLUDE_ARGS}
         -I "${CMAKE_CURRENT_SOURCE_DIR}"
         -I "${CMAKE_CURRENT_SOURCE_DIR}/monopoly"
         -I "${CMAKE_CURRENT_SOURCE_DIR}/artlib"
@@ -54,7 +92,8 @@ add_custom_command(
         -o "${MONOPOLY_GENERATED_BLTINC}"
     DEPENDS
         "${CMAKE_CURRENT_SOURCE_DIR}/artlib/L_BltInc.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/artlib/L_BLTCPY.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/artlib/L_BltCpy.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/artlib/L_BltFil.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/monopoly/C_ArtLib.h"
     COMMENT "Generating ArtLib blitter include"
     VERBATIM
@@ -63,6 +102,7 @@ add_custom_command(
 add_custom_target(monopoly_generate_bltinc
     DEPENDS "${MONOPOLY_GENERATED_BLTINC}"
 )
+add_dependencies(monopoly_generate_bltinc monopoly_casefold_include_overlay)
 
 set(MONOPOLY_AI_STRATEGY_FILES
     "${CMAKE_CURRENT_SOURCE_DIR}/monopoly/Barrow.AI"
@@ -211,6 +251,7 @@ add_executable(monopoly
 
 target_include_directories(monopoly PRIVATE
     "${MONOPOLY_GENERATED_DIR}"
+    ${MONOPOLY_CASEFOLD_INCLUDE_DIRS}
     web/compat
     web
     .
@@ -220,6 +261,7 @@ target_include_directories(monopoly PRIVATE
     ZLib
 )
 add_dependencies(monopoly monopoly_generate_bltinc)
+add_dependencies(monopoly monopoly_casefold_include_overlay)
 
 target_compile_definitions(monopoly PRIVATE
     MONOPOLY_WEB=1

@@ -1,6 +1,10 @@
-# Monopoly WebAssembly Port
+# Monopoly(1999) WebAssembly Port
 
-This tree contains the original late-1990s Monopoly C/C++ source with a WebAssembly/Emscripten port layer. The web build runs the game mode through WebGL2 and uses browser-local asset loading from a user-supplied retail CD ISO.
+![Monopoly Menu Screen](https://i.imgur.com/yVAykNP.jpeg)
+
+[Play in your browser](https://mrarm.github.io/Monopoly99_wasm/)
+
+**The web build does not include retail game assets. To play, you must provide your own legally obtained Monopoly CD ISO when the launcher asks for it.**
 
 Retail game assets are not committed, embedded, hosted, or compiled into the WASM output. At runtime, the launcher asks the user to provide a legally obtained ISO which is extracted into the browser's cache. You can find the ISO on many abandonware sites by searching around for it. The correct ISO file will contain a `DAT_MON` folder inside it. Future support for other ISO variations depends on demand.
 
