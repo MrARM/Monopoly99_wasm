@@ -11,7 +11,7 @@
 /************************************************************/
 
 #include "gameinc.h"
-#include "basictyp.h"
+#include "BasicTyp.h"
 #include "lang.h"
 #include <locale.h>
 

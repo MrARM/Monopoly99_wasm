@@ -11,7 +11,7 @@
 */
 #include <assert.h>
 #include "zimplode.h"
-#include "basictyp.h"
+#include "BasicTyp.h"
 #include "zlib.h"
 
 /*
